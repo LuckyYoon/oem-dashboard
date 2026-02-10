@@ -306,7 +306,6 @@ int main(int argc,char **argv){
     load_slogans(); load_used_flags();
     int idx=pick_random_unused(); used[idx]=1; save_used_flags();
     char wrapped[MAX_LEN]; strncpy(wrapped,slogans[idx],MAX_LEN-1); wrapped[MAX_LEN-1]=0; wrap_slogan(wrapped);
-    lv_init(); sdl_hal_init(800,480);
     lv_obj_set_style_bg_color(lv_screen_active(),lv_color_black(),LV_PART_MAIN);
 
     logo=lv_image_create(lv_screen_active()); LV_IMAGE_DECLARE(oem_logo); lv_image_set_src(logo,&oem_logo); lv_obj_align(logo,LV_ALIGN_CENTER,0,-40);
