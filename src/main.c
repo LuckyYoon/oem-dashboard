@@ -97,7 +97,8 @@ static void wrap_slogan(char *s) {
 }
 
 static lv_color_t get_tire_color(int temp) {
-    if(temp<0) temp=0; if(temp>200) temp=200;
+    if(temp<0) temp=0; 
+    if(temp>200) temp=200;
     if(temp<=40) return lv_color_hex(0xC8C8C8);
     if(temp<=70){float t=(temp-40)/30.0f; return lv_color_make((uint8_t)(200*(1-t)),(uint8_t)(200+55*t),(uint8_t)(200*(1-t)));}
     if(temp<=90) return lv_color_hex(0x00FF00);
@@ -112,6 +113,8 @@ static void update_all_tire_colors(int fl,int fr,int rl,int rr){update_tire_colo
 static void tire_color_timer(lv_timer_t *timer){
     int fl=atoi(lv_label_get_text(fl_temp)),fr=atoi(lv_label_get_text(fr_temp)),rl=atoi(lv_label_get_text(rl_temp)),rr=atoi(lv_label_get_text(rr_temp));
     update_all_tire_colors(fl,fr,rl,rr);
+
+    lv_timer_delete(timer);
 }
 
 static lv_color_t get_battery_color(int index,int total){
@@ -290,19 +293,12 @@ int main(int argc,char **argv){
     /* Initialize LVGL */
     lv_init();
 
-    /* ---------------------------------------------------------
-       Create the Linux framebuffer display
-       --------------------------------------------------------- */
+    /* Add framebuffer display setup */
     lv_display_t *disp = lv_linux_fbdev_create();
-    if(!disp) {
-        fprintf(stderr, "Failed to initialize framebuffer display\n");
-        return -1;
-    }
-
-    /* Optional: set framebuffer file if not default /dev/fb0 */
     lv_linux_fbdev_set_file(disp, "/dev/fb0");
-
+    
     (void)argc;(void)argv; srand(time(NULL));
+
     load_slogans(); load_used_flags();
     int idx=pick_random_unused(); used[idx]=1; save_used_flags();
     char wrapped[MAX_LEN]; strncpy(wrapped,slogans[idx],MAX_LEN-1); wrapped[MAX_LEN-1]=0; wrap_slogan(wrapped);
