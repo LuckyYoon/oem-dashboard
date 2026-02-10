@@ -371,8 +371,14 @@ target_include_directories(lvgl_linux PUBLIC
 # Link LVGL with external dependencies - Modern CMake/CMP0079 allows this
 target_link_libraries(lvgl PUBLIC ${PKG_CONFIG_LIB} m pthread)
 
-add_executable(lvglapp src/main.c)
-target_link_libraries(lvglapp lvgl_linux lvgl m pthread)
+add_executable(lvgl_app src/main.c src/oem_logo.c)
+
+target_link_libraries(lvgl_app
+    lvgl       # core LVGL library
+    m          # math library
+    pthread    # POSIX threads
+)
+
 
 if(WERROR)
     target_compile_options(lvgl PRIVATE -Werror)
