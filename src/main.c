@@ -14,6 +14,10 @@
 #endif
 #include "lvgl/lvgl.h"
 
+#include "lvgl/lvgl.h"
+#include "lv_drivers/display/fbdev.h"
+#include "lv_drivers/indev/evdev.h"
+
 #if LV_USE_OS != LV_OS_FREERTOS
 
 #define BATTERY_BAR_WIDTH 80
@@ -287,6 +291,22 @@ static void hide_error(lv_timer_t *timer)
 }
 
 int main(int argc,char **argv){
+    lv_init();
+    fbdev_init();
+
+    // register display driver
+    lv_disp_draw_buf_t draw_buf;
+    static lv_color_t buf[800 * 10];
+    lv_disp_draw_buf_init(&draw_buf, buf, NULL, 800 * 10);
+
+    lv_disp_drv_t disp_drv;
+    lv_disp_drv_init(&disp_drv);
+    disp_drv.draw_buf = &draw_buf;
+    disp_drv.flush_cb = fbdev_flush;
+    disp_drv.hor_res = 800;
+    disp_drv.ver_res = 480;
+    lv_disp_drv_register(&disp_drv);
+
     (void)argc;(void)argv; srand(time(NULL));
     load_slogans(); load_used_flags();
     int idx=pick_random_unused(); used[idx]=1; save_used_flags();
