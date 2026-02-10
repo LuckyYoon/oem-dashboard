@@ -13,7 +13,6 @@
 #include <pthread.h>
 #endif
 #include "lvgl/lvgl.h"
-#include "hal/hal.h"
 
 #if LV_USE_OS != LV_OS_FREERTOS
 
