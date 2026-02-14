@@ -4,7 +4,7 @@
 # To use one of those configs directly, set the `CONFIG` CMake variable:
 # eg: `cmake -B build -DCONFIG=drm-egl-2d` for `configs/drm-egl-2d.defaults`
 
-LV_COLOR_DEPTH	    16
+LV_COLOR_DEPTH	    32
 
 # Draw units
 # A draw unit is responsible for how the LVGL UI is rendered to the draw buffer
@@ -55,7 +55,7 @@ LV_WAYLAND_USE_DMABUF           0
 LV_USE_GLFW 0
 
 # Input support (enable when using FBDEV or DRM)
-LV_USE_EVDEV    1
+LV_USE_EVDEV    0
 LV_USE_LIBINPUT 0
 
 # Auxiliary drivers
@@ -168,12 +168,8 @@ LV_FONT_DEJAVU_16_PERSIAN_HEBREW	1
 LV_FONT_SOURCE_HAN_SANS_SC_16_CJK	1
 LV_FONT_UNSCII_8	1
 LV_FONT_FMT_TXT_LARGE       1
-LV_FONT_ROBOTO_24 1
-LV_FONT_ROBOTO_32 1
-LV_FONT_ROBOTO_40 1
-LV_FONT_ROBOTO_48 1
-LV_FONT_ROBOTO_64 1
-LV_FONT_ROBOTO_184 1
+
+LV_FONT_CUSTOM_DECLARE LV_FONT_DECLARE(lv_font_roboto_24) LV_FONT_DECLARE(lv_font_roboto_32) LV_FONT_DECLARE(lv_font_roboto_40) LV_FONT_DECLARE(lv_font_roboto_48) LV_FONT_DECLARE(lv_font_roboto_64) LV_FONT_DECLARE(lv_font_roboto_184)
 
 # Stdlib
 LV_USE_STDLIB_MALLOC LV_STDLIB_CLIB

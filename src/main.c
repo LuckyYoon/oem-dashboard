@@ -24,16 +24,47 @@
 #define SLOGAN_FILE "src/slogans.txt"
 #define USED_FILE "src/slogan_flags.bin"
 
-// On separate lines for looks; fix later
-static lv_obj_t *logo, *mark, *slogan, *speed, *fl_temp, *fr_temp, *rl_temp, *rr_temp;
-static lv_obj_t *fl_border, *fr_border, *rl_border, *rr_border, *mode_text_border, *mode_text;
-static lv_obj_t *mode_border, *mode, *lap_time, *last_time, *best_time, *battery_bar;
-static lv_obj_t *rtd_border, *rtd, *batt_border, *batt_text, *batt_percent_border, *batt_percent;
-static lv_obj_t *batt_temp_border, *batt_temp, *temp_border, *temp, *batt_volt_border, *batt_volt;
-static lv_obj_t *volt_border, *volt, *lv_border, *lv, *hv_border, *hv, *set_screen, *set_text;
-static lv_obj_t *msg_border, *msg, *throttle_cont, *throttle, *throttle_text, *brake_cont, *brake, *brake_text;
+// Start up screen
+static lv_obj_t *logo, *mark, *slogan;
+
+// Speed and tire temperatures
+static lv_obj_t *speed, *fl_temp, *fr_temp, *rl_temp, *rr_temp;
+static lv_obj_t *fl_border, *fr_border, *rl_border, *rr_border;
+
+// Mode display
+static lv_obj_t *mode_text_border, *mode_text, *mode_border, *mode;
+
+// Lap timing
+static lv_obj_t *lap_time, *last_time, *best_time;
+
+// Battery
+static lv_obj_t *battery_bar, *batt_border, *batt_text;
+static lv_obj_t *batt_percent_border, *batt_percent;
+static lv_obj_t *batt_temp_border, *batt_temp;
+static lv_obj_t *batt_volt_border, *batt_volt;
+
+// Temperature and voltage
+static lv_obj_t *temp_border, *temp, *volt_border, *volt;
+
+// Low voltage, high voltage, and RTD
+static lv_obj_t *lv_border, *lv, *hv_border, *hv;
+static lv_obj_t *rtd_border, *rtd;
+
+// Settings
+static lv_obj_t *set_screen, *set_text;
+
+// Driver messages
+static lv_obj_t *msg_border, *msg;
+
+// Throttle and brake
+static lv_obj_t *throttle_cont, *throttle, *throttle_text;
+static lv_obj_t *brake_cont, *brake, *brake_text;
+
+// Error and safety systems
 static lv_obj_t *error, *ts, *ams, *imd, *error_msg, *error_msg_border;
 static lv_timer_t *lap_timer;
+
+// Misc
 static uint32_t lap_start_ms;
 static char slogans[MAX_SLOGANS][MAX_LEN];
 static int slogan_count = 0;
@@ -188,7 +219,7 @@ static lv_obj_t* create_border(lv_obj_t *parent,int w,int h,lv_color_t bg,lv_col
 static void delete_logo(lv_timer_t *timer)
 {
     lv_obj_t *objs[] = {logo, mark, slogan};
-    for(int i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
         lv_obj_delete(objs[i]);
     }
     lv_timer_delete(timer);
@@ -234,7 +265,7 @@ static void show_dash(lv_timer_t *timer)
         throttle_text, brake_cont, brake_text, msg_border
     };
 
-    for(int i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
         lv_obj_remove_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -256,7 +287,7 @@ static void hide_dash(lv_timer_t *timer)
         throttle_text, brake_cont, brake_text, msg_border
     };
 
-    for(int i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
         lv_obj_add_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -269,7 +300,7 @@ static void show_error(lv_timer_t *timer)
         error, ts, ams, imd, error_msg, error_msg_border
     };
 
-    for(int i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
         lv_obj_remove_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -282,7 +313,7 @@ static void hide_error(lv_timer_t *timer)
         error, ts, ams, imd, error_msg, error_msg_border
     };
 
-    for(int i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
         lv_obj_add_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -519,6 +550,8 @@ int main(int argc,char **argv){
     lv_timer_create(change_speed, 7000, NULL);
     lv_timer_create(hide_dash, 10000, NULL);
     lv_timer_create(show_error, 10001, NULL);
+    lv_timer_create(hide_error, 20000, NULL);
+    lv_timer_create(show_dash, 20001, NULL);
 
     while(1)
     {
