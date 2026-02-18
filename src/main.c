@@ -127,17 +127,37 @@ static void setup_gpio(void) {
     chip = gpiod_chip_open("/dev/gpiochip0");
     if (!chip) {
         fprintf(stderr, "Failed to open GPIO chip\n");
+        fprintf(stderr, "Try running with sudo or check GPIO permissions\n");
         exit(1);
     }
     
     req_cfg = gpiod_request_config_new();
+    if (!req_cfg) {
+        fprintf(stderr, "Failed to create request config\n");
+        gpiod_chip_close(chip);
+        exit(1);
+    }
     gpiod_request_config_set_consumer(req_cfg, "rotary_encoder");
     
-    line_cfg = gpiod_line_config_new();
     settings = gpiod_line_settings_new();
+    if (!settings) {
+        fprintf(stderr, "Failed to create line settings\n");
+        gpiod_request_config_free(req_cfg);
+        gpiod_chip_close(chip);
+        exit(1);
+    }
     
     gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
     gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_PULL_UP);
+    
+    line_cfg = gpiod_line_config_new();
+    if (!line_cfg) {
+        fprintf(stderr, "Failed to create line config\n");
+        gpiod_line_settings_free(settings);
+        gpiod_request_config_free(req_cfg);
+        gpiod_chip_close(chip);
+        exit(1);
+    }
     
     gpiod_line_config_add_line_settings(line_cfg, offsets, 3, settings);
     
@@ -149,6 +169,7 @@ static void setup_gpio(void) {
     
     if (!line_request) {
         fprintf(stderr, "Failed to request GPIO lines\n");
+        fprintf(stderr, "Make sure GPIO pins are not in use\n");
         gpiod_chip_close(chip);
         exit(1);
     }
