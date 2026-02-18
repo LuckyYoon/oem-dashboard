@@ -13,6 +13,7 @@
 #include <pthread.h>
 #endif
 #include "lvgl/lvgl.h"
+#include <gpiod.h>
 
 #if LV_USE_OS != LV_OS_FREERTOS
 
@@ -23,6 +24,39 @@
 #define MAX_LEN 128
 #define SLOGAN_FILE "src/slogans.txt"
 #define USED_FILE "src/slogan_flags.bin"
+
+// GPIO Pin definitions (BCM numbering)
+#define CLK_PIN 17
+#define DT_PIN 27
+#define SW_PIN 22
+
+// GPIO chip and lines
+static struct gpiod_chip *chip;
+static struct gpiod_line *clk_line;
+static struct gpiod_line *dt_line;
+static struct gpiod_line *sw_line;
+
+// Encoder state variables
+static int clk_last_state = 0;
+static double last_rotation_time = 0;
+static double last_mode_change_time = 0;
+static int sw_last_state = 1;
+static const double MIN_ROTATION_INTERVAL = 0.005;  // 5ms debounce
+static const double MODE_CONFIRM_DELAY = 0.5;  // 500ms confirmation delay
+
+// Mode management
+static const char* modes[] = {"MENU", "RACE", "QUAL", "PITL"};
+static int current_mode_index = 0;
+static int pending_mode_index = 0;
+static int mode_confirmed = 1;
+
+// Screen state management
+typedef enum {
+    SCREEN_LOGO,
+    SCREEN_DASH,
+    SCREEN_ERROR
+} screen_state_t;
+static screen_state_t current_screen = SCREEN_LOGO;
 
 // Start up screen
 static lv_obj_t *logo, *mark, *slogan;
@@ -69,6 +103,209 @@ static uint32_t lap_start_ms;
 static char slogans[MAX_SLOGANS][MAX_LEN];
 static int slogan_count = 0;
 static unsigned char used[MAX_SLOGANS];
+static lv_timer_t *mode_confirm_timer = NULL;4
+
+static double get_time_seconds(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+static void setup_gpio(void) {
+    chip = gpiod_chip_open("/dev/gpiochip0");
+    if (!chip) {
+        fprintf(stderr, "Failed to open GPIO chip\n");
+        exit(1);
+    }
+    
+    clk_line = gpiod_chip_get_line(chip, CLK_PIN);
+    dt_line = gpiod_chip_get_line(chip, DT_PIN);
+    sw_line = gpiod_chip_get_line(chip, SW_PIN);
+    
+    gpiod_line_request_input_flags(clk_line, "rotary_clk", GPIOD_LINE_REQUEST_FLAG_BIAS_PULL_UP);
+    gpiod_line_request_input_flags(dt_line, "rotary_dt", GPIOD_LINE_REQUEST_FLAG_BIAS_PULL_UP);
+    gpiod_line_request_input_flags(sw_line, "rotary_sw", GPIOD_LINE_REQUEST_FLAG_BIAS_PULL_UP);
+    
+    clk_last_state = gpiod_line_get_value(clk_line);
+    sw_last_state = gpiod_line_get_value(sw_line);
+}
+
+static void update_mode_label(void) {
+    lv_label_set_text(mode, modes[pending_mode_index]);
+}
+
+static void mode_confirm_timer_cb(lv_timer_t *timer) {
+    // Flash the screen with the confirmed mode
+    lv_obj_remove_flag(set_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(set_text, modes[pending_mode_index]);
+    
+    // Confirm the mode change
+    current_mode_index = pending_mode_index;
+    mode_confirmed = 1;
+    
+    // Hide the flash screen after 1 second
+    lv_timer_create(hide_set_screen_cb, 1000, NULL);
+    
+    // Delete this timer
+    mode_confirm_timer = NULL;
+    lv_timer_delete(timer);
+}
+
+static void handle_mode_change(int direction) {
+    // Update pending mode
+    pending_mode_index += direction;
+    if (pending_mode_index < 0) pending_mode_index = 3;
+    if (pending_mode_index > 3) pending_mode_index = 0;
+    
+    // Update the label immediately
+    update_mode_label();
+    
+    // Reset confirmation state
+    mode_confirmed = 0;
+    last_mode_change_time = get_time_seconds();
+    
+    // Cancel existing timer if any
+    if (mode_confirm_timer != NULL) {
+        lv_timer_delete(mode_confirm_timer);
+        mode_confirm_timer = NULL;
+    }
+    
+    // Create new confirmation timer
+    mode_confirm_timer = lv_timer_create(mode_confirm_timer_cb, 500, NULL);
+}
+
+static void read_encoder(void) {
+    double current_time = get_time_seconds();
+    int clk_state = gpiod_line_get_value(clk_line);
+    
+    if (current_screen == SCREEN_DASH) {
+        if (clk_state == 0 && clk_last_state == 1) {
+            if ((current_time - last_rotation_time) > MIN_ROTATION_INTERVAL) {
+                int dt_state = gpiod_line_get_value(dt_line);
+                if (dt_state == 0) {
+                    handle_mode_change(-1);
+                } else {
+                    handle_mode_change(1);
+                }
+                last_rotation_time = current_time;
+            }
+        }
+    }
+    
+    clk_last_state = clk_state;
+}
+
+static void hide_logo_screen(void) {
+    if (logo != NULL) lv_obj_add_flag(logo, LV_OBJ_FLAG_HIDDEN);
+    if (mark != NULL) lv_obj_add_flag(mark, LV_OBJ_FLAG_HIDDEN);
+    if (slogan != NULL) lv_obj_add_flag(slogan, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void show_logo_screen(void) {
+    if (logo != NULL) lv_obj_remove_flag(logo, LV_OBJ_FLAG_HIDDEN);
+    if (mark != NULL) lv_obj_remove_flag(mark, LV_OBJ_FLAG_HIDDEN);
+    if (slogan != NULL) lv_obj_remove_flag(slogan, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void hide_dash_elements(void) {
+    lv_obj_t *objs[] = {
+        speed, fl_border, fr_border, rl_border, rr_border,
+        fl_temp, fr_temp, rl_temp, rr_temp, mode_text_border,
+        mode_border, lap_time, last_time, best_time,
+        battery_bar, rtd_border, batt_border, batt_percent_border,
+        lv_border, hv_border, batt_temp_border, temp_border,
+        batt_volt_border, volt_border, throttle_cont,
+        throttle_text, brake_cont, brake_text, msg_border
+    };
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+        lv_obj_add_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void show_dash_elements(void) {
+    lv_obj_t *objs[] = {
+        speed, fl_border, fr_border, rl_border, rr_border,
+        fl_temp, fr_temp, rl_temp, rr_temp, mode_text_border,
+        mode_border, lap_time, last_time, best_time,
+        battery_bar, rtd_border, batt_border, batt_percent_border,
+        lv_border, hv_border, batt_temp_border, temp_border,
+        batt_volt_border, volt_border, throttle_cont,
+        throttle_text, brake_cont, brake_text, msg_border
+    };
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+        lv_obj_remove_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void hide_error_elements(void) {
+    lv_obj_t * objs[] = {
+        error, ts, ams, imd, error_msg, error_msg_border
+    };
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+        lv_obj_add_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void show_error_elements(void) {
+    lv_obj_t * objs[] = {
+        error, ts, ams, imd, error_msg, error_msg_border
+    };
+    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
+        lv_obj_remove_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+static void switch_to_screen(screen_state_t new_screen) {
+    // Hide all screens first
+    hide_logo_screen();
+    hide_dash_elements();
+    hide_error_elements();
+    
+    // Show the requested screen
+    switch(new_screen) {
+        case SCREEN_LOGO:
+            show_logo_screen();
+            break;
+        case SCREEN_DASH:
+            show_dash_elements();
+            if (lap_timer == NULL) {
+                lap_start_ms = get_ms();
+                lap_timer = lv_timer_create(lap_timer_cb, 10, lap_time);
+            }
+            break;
+        case SCREEN_ERROR:
+            show_error_elements();
+            break;
+    }
+    
+    current_screen = new_screen;
+}
+
+static void handle_button_press(void) {
+    // Cycle through screens: ERROR -> DASH -> LOGO -> ERROR
+    switch(current_screen) {
+        case SCREEN_ERROR:
+            switch_to_screen(SCREEN_DASH);
+            break;
+        case SCREEN_DASH:
+            switch_to_screen(SCREEN_LOGO);
+            break;
+        case SCREEN_LOGO:
+            switch_to_screen(SCREEN_ERROR);
+            break;
+    }
+}
+
+static void read_button(void) {
+    int sw_state = gpiod_line_get_value(sw_line);
+    
+    if (sw_state == 0 && sw_last_state == 1) {
+        handle_button_press();
+        usleep(50000);
+    }
+    
+    sw_last_state = sw_state;
+}
 
 static uint32_t get_ms(void) {
     struct timespec ts;
@@ -255,74 +492,34 @@ static void set_mode(lv_timer_t *timer)
 
 static void show_dash(lv_timer_t *timer)
 {
-    lv_obj_t *objs[] = {
-        speed, fl_border, fr_border, rl_border, rr_border,
-        fl_temp, fr_temp, rl_temp, rr_temp, mode_text_border,
-        mode_border, lap_time, last_time, best_time,
-        battery_bar, rtd_border, batt_border, batt_percent_border,
-        lv_border, hv_border, batt_temp_border, temp_border,
-        batt_volt_border, volt_border, throttle_cont,
-        throttle_text, brake_cont, brake_text, msg_border
-    };
-
-    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
-        lv_obj_remove_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
-    }
-
-    lap_start_ms = get_ms();
-    lap_timer = lv_timer_create(lap_timer_cb, 10, lap_time);
-
+    switch_to_screen(SCREEN_DASH);
     lv_timer_delete(timer);
 }
 
 static void hide_dash(lv_timer_t *timer)
 {
-    lv_obj_t *objs[] = {
-        speed, fl_border, fr_border, rl_border, rr_border,
-        fl_temp, fr_temp, rl_temp, rr_temp, mode_text_border,
-        mode_border, lap_time, last_time, best_time,
-        battery_bar, rtd_border, batt_border, batt_percent_border,
-        lv_border, hv_border, batt_temp_border, temp_border,
-        batt_volt_border, volt_border, throttle_cont,
-        throttle_text, brake_cont, brake_text, msg_border
-    };
-
-    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
-        lv_obj_add_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
-    }
-
+    hide_dash_elements();
     lv_timer_delete(timer);
 }
 
 static void show_error(lv_timer_t *timer)
 {
-    lv_obj_t * objs[] = {
-        error, ts, ams, imd, error_msg, error_msg_border
-    };
-
-    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
-        lv_obj_remove_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
-    }
-
+    switch_to_screen(SCREEN_ERROR);
     lv_timer_delete(timer);
 }
 
 static void hide_error(lv_timer_t *timer)
 {
-    lv_obj_t * objs[] = {
-        error, ts, ams, imd, error_msg, error_msg_border
-    };
-
-    for(size_t i = 0; i < sizeof(objs)/sizeof(objs[0]); i++) {
-        lv_obj_add_flag(objs[i], LV_OBJ_FLAG_HIDDEN);
-    }
-
+    hide_error_elements();
     lv_timer_delete(timer);
 }
 
 int main(int argc,char **argv){
     /* Initialize LVGL */
     lv_init();
+
+    /* Initialize GPIO */
+    setup_gpio();
 
     /* Add framebuffer display setup */
     lv_display_t *disp = lv_linux_fbdev_create();
@@ -555,6 +752,9 @@ int main(int argc,char **argv){
 
     while(1)
     {
+        /* Read encoder and button */
+        read_encoder();
+        read_button();
         /* Periodically call the lv_task handler.
         * It could be done in a timer interrupt or an OS task too.*/
         uint32_t sleep_time_ms = lv_timer_handler();
@@ -568,6 +768,11 @@ int main(int argc,char **argv){
         usleep(sleep_time_ms * 1000);
     #endif
     }
+
+    gpiod_line_release(clk_line);
+    gpiod_line_release(dt_line);
+    gpiod_line_release(sw_line);
+    gpiod_chip_close(chip);
 
     return 0;
 }

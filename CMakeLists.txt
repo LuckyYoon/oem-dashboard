@@ -372,7 +372,7 @@ target_include_directories(lvgl_linux PUBLIC
 target_link_libraries(lvgl PUBLIC ${PKG_CONFIG_LIB} m pthread)
 
 add_executable(lvglsim src/main.c src/oem_logo.c)
-target_link_libraries(lvglsim lvgl_linux lvgl m pthread)
+target_link_libraries(lvglsim lvgl_linux lvgl m pthread gpiod)
 
 if(WERROR)
     target_compile_options(lvglsim PRIVATE -Werror)
