@@ -561,7 +561,7 @@ int main(int argc,char **argv){
     lv_init();
 
     /* Initialize GPIO */
-    //setup_gpio();
+    setup_gpio();
 
     /* Add framebuffer display setup */
     lv_display_t *disp = lv_linux_fbdev_create();
@@ -783,9 +783,9 @@ int main(int argc,char **argv){
     msg_enable_vertical_scroll(error_msg, 300);
 
     lv_timer_create(tire_color_timer, 1000, NULL);
-    lv_timer_create(delete_logo, 2000, NULL);
+    /*lv_timer_create(delete_logo, 2000, NULL);
     lv_timer_create(show_dash, 2001, NULL);
-    /*lv_timer_create(set_mode, 5000, NULL);
+    lv_timer_create(set_mode, 5000, NULL);
     lv_timer_create(change_speed, 7000, NULL);
     lv_timer_create(hide_dash, 10000, NULL);
     lv_timer_create(show_error, 10001, NULL);
@@ -795,8 +795,8 @@ int main(int argc,char **argv){
     while(1)
     {
         /* Read encoder and button */
-        // read_encoder();
-        // read_button();
+        read_encoder();
+        read_button();
         /* Periodically call the lv_task handler.
         * It could be done in a timer interrupt or an OS task too.*/
         uint32_t sleep_time_ms = lv_timer_handler();
@@ -811,8 +811,8 @@ int main(int argc,char **argv){
     #endif
     }
 
-    // gpiod_line_request_release(line_request);
-    // gpiod_chip_close(chip);
+    gpiod_line_request_release(line_request);
+    gpiod_chip_close(chip);
     
     return 0;
 }
