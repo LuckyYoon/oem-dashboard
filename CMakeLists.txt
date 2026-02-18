@@ -371,13 +371,12 @@ target_include_directories(lvgl_linux PUBLIC
 # Link LVGL with external dependencies - Modern CMake/CMP0079 allows this
 target_link_libraries(lvgl PUBLIC ${PKG_CONFIG_LIB} m pthread)
 
-# Find gpiod library
-find_library(GPIOD_LIBRARY gpiod REQUIRED)
-find_path(GPIOD_INCLUDE_DIR gpiod.h)
-include_directories(${GPIOD_INCLUDE_DIR})
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GPIOD REQUIRED libgpiod)
 
 add_executable(lvglsim src/main.c src/oem_logo.c)
-target_link_libraries(lvglsim lvgl_linux lvgl m pthread gpiod)
+target_include_directories(lvglsim PRIVATE ${GPIOD_INCLUDE_DIRS})
+target_link_libraries(lvglsim lvgl_linux lvgl m pthread ${GPIOD_LIBRARIES})
 
 if(WERROR)
     target_compile_options(lvglsim PRIVATE -Werror)

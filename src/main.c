@@ -32,9 +32,10 @@
 
 // GPIO chip and lines
 static struct gpiod_chip *chip;
-static struct gpiod_line *clk_line;
-static struct gpiod_line *dt_line;
-static struct gpiod_line *sw_line;
+static struct gpiod_line_request *line_request;
+static unsigned int clk_offset = CLK_PIN;
+static unsigned int dt_offset = DT_PIN;
+static unsigned int sw_offset = SW_PIN;
 
 // Encoder state variables
 static int clk_last_state = 0;
@@ -118,22 +119,42 @@ static uint32_t get_ms(void) {
 }
 
 static void setup_gpio(void) {
+    struct gpiod_request_config *req_cfg;
+    struct gpiod_line_config *line_cfg;
+    struct gpiod_line_settings *settings;
+    unsigned int offsets[3] = {CLK_PIN, DT_PIN, SW_PIN};
+    
     chip = gpiod_chip_open("/dev/gpiochip0");
     if (!chip) {
         fprintf(stderr, "Failed to open GPIO chip\n");
         exit(1);
     }
     
-    clk_line = gpiod_chip_get_line(chip, CLK_PIN);
-    dt_line = gpiod_chip_get_line(chip, DT_PIN);
-    sw_line = gpiod_chip_get_line(chip, SW_PIN);
+    req_cfg = gpiod_request_config_new();
+    gpiod_request_config_set_consumer(req_cfg, "rotary_encoder");
     
-    gpiod_line_request_input_flags(clk_line, "rotary_clk", GPIOD_LINE_REQUEST_FLAG_BIAS_PULL_UP);
-    gpiod_line_request_input_flags(dt_line, "rotary_dt", GPIOD_LINE_REQUEST_FLAG_BIAS_PULL_UP);
-    gpiod_line_request_input_flags(sw_line, "rotary_sw", GPIOD_LINE_REQUEST_FLAG_BIAS_PULL_UP);
+    line_cfg = gpiod_line_config_new();
+    settings = gpiod_line_settings_new();
     
-    clk_last_state = gpiod_line_get_value(clk_line);
-    sw_last_state = gpiod_line_get_value(sw_line);
+    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
+    gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_PULL_UP);
+    
+    gpiod_line_config_add_line_settings(line_cfg, offsets, 3, settings);
+    
+    line_request = gpiod_chip_request_lines(chip, req_cfg, line_cfg);
+    
+    gpiod_line_settings_free(settings);
+    gpiod_request_config_free(req_cfg);
+    gpiod_line_config_free(line_cfg);
+    
+    if (!line_request) {
+        fprintf(stderr, "Failed to request GPIO lines\n");
+        gpiod_chip_close(chip);
+        exit(1);
+    }
+    
+    clk_last_state = gpiod_line_request_get_value(line_request, clk_offset);
+    sw_last_state = gpiod_line_request_get_value(line_request, sw_offset);
 }
 
 static void update_mode_label(void) {
@@ -188,12 +209,12 @@ static void handle_mode_change(int direction) {
 
 static void read_encoder(void) {
     double current_time = get_time_seconds();
-    int clk_state = gpiod_line_get_value(clk_line);
+    int clk_state = gpiod_line_request_get_value(line_request, clk_offset);
     
     if (current_screen == SCREEN_DASH) {
         if (clk_state == 0 && clk_last_state == 1) {
             if ((current_time - last_rotation_time) > MIN_ROTATION_INTERVAL) {
-                int dt_state = gpiod_line_get_value(dt_line);
+                int dt_state = gpiod_line_request_get_value(line_request, dt_offset);
                 if (dt_state == 0) {
                     handle_mode_change(-1);
                 } else {
@@ -317,7 +338,7 @@ static void handle_button_press(void) {
 }
 
 static void read_button(void) {
-    int sw_state = gpiod_line_get_value(sw_line);
+    int sw_state = gpiod_line_request_get_value(line_request, sw_offset);
     
     if (sw_state == 0 && sw_last_state == 1) {
         handle_button_press();
@@ -769,11 +790,9 @@ int main(int argc,char **argv){
     #endif
     }
 
-    gpiod_line_release(clk_line);
-    gpiod_line_release(dt_line);
-    gpiod_line_release(sw_line);
+    gpiod_line_request_release(line_request);
     gpiod_chip_close(chip);
-
+    
     return 0;
 }
 
