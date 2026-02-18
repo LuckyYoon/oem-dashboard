@@ -764,12 +764,12 @@ int main(int argc,char **argv){
     lv_timer_create(tire_color_timer, 1000, NULL);
     lv_timer_create(delete_logo, 2000, NULL);
     lv_timer_create(show_dash, 2001, NULL);
-    lv_timer_create(set_mode, 5000, NULL);
+    /*lv_timer_create(set_mode, 5000, NULL);
     lv_timer_create(change_speed, 7000, NULL);
     lv_timer_create(hide_dash, 10000, NULL);
     lv_timer_create(show_error, 10001, NULL);
     lv_timer_create(hide_error, 20000, NULL);
-    lv_timer_create(show_dash, 20001, NULL);
+    lv_timer_create(show_dash, 20001, NULL);*/
 
     while(1)
     {
