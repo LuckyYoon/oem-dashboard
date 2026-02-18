@@ -103,12 +103,18 @@ static uint32_t lap_start_ms;
 static char slogans[MAX_SLOGANS][MAX_LEN];
 static int slogan_count = 0;
 static unsigned char used[MAX_SLOGANS];
-static lv_timer_t *mode_confirm_timer = NULL;4
+static lv_timer_t *mode_confirm_timer = NULL;
 
 static double get_time_seconds(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+static uint32_t get_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
 static void setup_gpio(void) {
@@ -132,6 +138,12 @@ static void setup_gpio(void) {
 
 static void update_mode_label(void) {
     lv_label_set_text(mode, modes[pending_mode_index]);
+}
+
+static void hide_set_screen_cb(lv_timer_t *timer)
+{
+    lv_obj_add_flag(set_screen, LV_OBJ_FLAG_HIDDEN);
+    lv_timer_delete(timer);
 }
 
 static void mode_confirm_timer_cb(lv_timer_t *timer) {
@@ -171,7 +183,7 @@ static void handle_mode_change(int direction) {
     }
     
     // Create new confirmation timer
-    mode_confirm_timer = lv_timer_create(mode_confirm_timer_cb, 500, NULL);
+    mode_confirm_timer = lv_timer_create(mode_confirm_timer_cb, (uint32_t)(MODE_CONFIRM_DELAY * 1000), NULL);
 }
 
 static void read_encoder(void) {
@@ -255,6 +267,14 @@ static void show_error_elements(void) {
     }
 }
 
+static void lap_timer_cb(lv_timer_t *timer) {
+    lv_obj_t *label = lv_timer_get_user_data(timer);
+    uint32_t elapsed = get_ms() - lap_start_ms;
+    char buf[16];
+    lv_snprintf(buf, sizeof(buf), "%02lu:%02lu.%03lu", elapsed/60000, (elapsed%60000)/1000, elapsed%1000);
+    lv_label_set_text(label, buf);
+}
+
 static void switch_to_screen(screen_state_t new_screen) {
     // Hide all screens first
     hide_logo_screen();
@@ -305,20 +325,6 @@ static void read_button(void) {
     }
     
     sw_last_state = sw_state;
-}
-
-static uint32_t get_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
-}
-
-static void lap_timer_cb(lv_timer_t *timer) {
-    lv_obj_t *label = lv_timer_get_user_data(timer);
-    uint32_t elapsed = get_ms() - lap_start_ms;
-    char buf[16];
-    lv_snprintf(buf, sizeof(buf), "%02lu:%02lu.%03lu", elapsed/60000, (elapsed%60000)/1000, elapsed%1000);
-    lv_label_set_text(label, buf);
 }
 
 static void load_slogans() {
@@ -473,12 +479,6 @@ static void change_speed(lv_timer_t *timer)
     lv_label_set_text(throttle_text, "68");
     lv_bar_set_value(brake, 23, LV_ANIM_OFF);
     lv_label_set_text(brake_text, "23");
-    lv_timer_delete(timer);
-}
-
-static void hide_set_screen_cb(lv_timer_t *timer)
-{
-    lv_obj_add_flag(set_screen, LV_OBJ_FLAG_HIDDEN);
     lv_timer_delete(timer);
 }
 
